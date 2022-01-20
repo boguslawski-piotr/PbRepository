@@ -25,29 +25,25 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 
     public private(set) var name : String
 
-    private var baseUrl : URL?
+    private let baseUrl : URL
     private let coder : PbCoder
     private let fileManager : FileManager
     private let compression : ArchiveCompression
 
-    public init(name: String, compression: Compression = .none, coder: PbCoder? = nil, baseUrl : URL? = nil, fileManager: FileManager? = nil) {
+    public init(name: String, compression: Compression = .none, coder: PbCoder? = nil, baseUrl: URL? = nil, fileManager: FileManager? = nil) {
         self.name = name
         self.compression = compression
         self.coder = coder ?? PropertyListCoder()
-        self.fileManager = fileManager ?? FileManager.default
-        self.baseUrl = baseUrl ?? defaultBaseUrl()
-    }
-    
-    private func defaultBaseUrl() -> URL {
+        
+        let fileManager = fileManager ?? FileManager.default
         var url = fileManager.homeDirectoryForCurrentUser
         url.appendPathComponent(Bundle.main.name)
-        return url
+        self.baseUrl = baseUrl ?? url
+        self.fileManager = fileManager
     }
     
     private func repositoryUrl() throws -> URL {
-        guard baseUrl != nil else { throw Errno.deviceError }
-        
-        var url = baseUrl!
+        var url = baseUrl
         url.appendPathComponent(self.name)
         if !fileManager.fileExists(atPath: url.path) {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
@@ -55,7 +51,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         return url
     }
     
-    private func fileUrl(_ fileName : String) throws -> URL {
+    private func fileUrl(_ fileName: String) throws -> URL {
         var url = try repositoryUrl()
         url.appendPathComponent(fileName)
         return url
@@ -97,11 +93,11 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         try data.write(to: fileUrl, compression: compression)
     }
     
-    public func storeAsync<T: Encodable>(item : T, to name : String) async throws {
+    public func storeAsync<T: Encodable>(item: T, to name: String) async throws {
         try store(item: item, to: name)
     }
     
-    public func store<T: Sequence>(sequence : T, to name : String) throws where T.Element: Encodable {
+    public func store<T: Sequence>(sequence: T, to name: String) throws where T.Element: Encodable {
         let fileUrl = try fileUrl(name)
         if compression == .none {
             try store(item: sequence.map({$0}), to: name)
@@ -112,7 +108,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         }
     }
     
-    public func storeAsync<T: Sequence>(sequence : T, to name : String) async throws where T.Element: Encodable {
+    public func storeAsync<T: Sequence>(sequence: T, to name: String) async throws where T.Element: Encodable {
         try store(sequence: sequence, to: name)
     }
     
@@ -124,11 +120,11 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         return try coder.decode(T.self, from: data)
     }
     
-    public func retrieveAsync<T: Decodable>(itemOf type : T.Type, from name : String) async throws -> T? {
+    public func retrieveAsync<T: Decodable>(itemOf type: T.Type, from name: String) async throws -> T? {
         try retrieve(itemOf: type, from: name)
     }
     
-    public func retrieve<T: Decodable>(sequenceOf type : T.Type, from name : String) throws -> ThrowingStream<T, Error>? {
+    public func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>? {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         
@@ -147,7 +143,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         }
     }
 
-    public func retrieveAsync<T: Decodable>(sequenceOf type : T.Type, from name : String) async throws -> AsyncThrowingStream<T, Error>? {
+    public func retrieveAsync<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>? {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
 
@@ -167,7 +163,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         }
     }
     
-    public func rename(_ from : String, to : String) throws -> Bool {
+    public func rename(_ from: String, to: String) throws -> Bool {
         let fromUrl = try fileUrl(from)
         guard fileManager.fileExists(atPath: fromUrl.path) else { return false }
         let toUrl = try fileUrl(to)
@@ -175,11 +171,11 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         return true
     }
     
-    public func renameAsync(_ from : String, to : String) async throws -> Bool {
+    public func renameAsync(_ from: String, to: String) async throws -> Bool {
         try rename(from, to: to)
     }
     
-    public func delete(_ name : String) throws {
+    public func delete(_ name: String) throws {
         let fileUrl = try fileUrl(name)
         if fileManager.fileExists(atPath: fileUrl.path) {
             try fileManager.trashItem(at: fileUrl, resultingItemURL: nil)
