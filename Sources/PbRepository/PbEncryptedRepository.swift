@@ -6,7 +6,7 @@ import Foundation
 import PbEssentials
 
 /// Decorator for classes that conforms to the PbRepository / PbRepositoryAsync protocols
-/// providing encryption of stored items and of course decrypting when retrieving.
+/// providing encryption of stored items and of course decryption when retrieving.
 open class PbEncryptedRepository : PbRepository, PbRepositoryAsync
 {
     // MARK: Initialization with underlying repository and some cipher
