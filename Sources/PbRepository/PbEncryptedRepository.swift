@@ -1,85 +1,151 @@
+/// Swift PbRepository
+/// Copyright (c) Piotr Boguslawski
+/// MIT license, see License.md file for details.
+
 import Foundation
 import PbEssentials
 
 /// Decorator for classes that conforms to the PbRepository / PbRepositoryAsync protocols
 /// providing encryption of stored items and of course decrypting when retrieving.
-///
-/// This class should always be inherited and methods `encrypt(_)`
-/// and `decrypt(itemof:from)` should be overridden because default
-/// implementation is very trivial and has nothing to do with data encryption :)
-open class PbEncryptedRepository : PbRepositoryAsync
+open class PbEncryptedRepository : PbRepository, PbRepositoryAsync
 {
+    // MARK: Initialization with underlying repository and some cipher
+    
     public let name : String
-    private let repository : PbRepositoryAsync
+    private var cipher : PbCipher
+
+    private var rS : PbSimpleRepository?
+    private var rF : PbRepository?
+    private var rSA : PbSimpleRepositoryAsync?
+    private var rFA : PbRepositoryAsync?
     
-    public init(_ repository: PbRepositoryAsync) {
+    public init(_ repository: PbSimpleRepository, cipher: PbCipher) {
         self.name = repository.name
-        self.repository = repository
+        self.cipher = cipher
+        self.rS = repository
     }
 
-    // MARK: Encyption & Decryption
-    
-    private lazy var encoder = JSONEncoder()
-    private lazy var decoder = JSONDecoder()
-
-    /// Should encrypt item of type T into object of type Data.
-    open func encrypt<T>(_ item: T) throws -> Data where T : Encodable {
-        var data = try encoder.encode(item)
-        data.enumerated().forEach { (i, _) in data[i] = ~data[i] }
-        return data
+    public init(_ repository: PbRepository, cipher: PbCipher) {
+        self.name = repository.name
+        self.cipher = cipher
+        self.rS = repository
+        self.rF = repository
     }
 
-    /// Should decrypt data into object of type T.
-    open func decrypt<T>(itemOf type: T.Type, from data: Data) throws -> T? where T : Decodable {
-        var data = data
-        data.enumerated().forEach { (i, _) in data[i] = ~data[i] }
-        return try decoder.decode(type, from: data)
+    public init(async repository: PbSimpleRepositoryAsync, cipher: PbCipher) {
+        self.name = repository.name
+        self.cipher = cipher
+        self.rSA = repository
+    }
+
+    public init(async repository: PbRepositoryAsync, cipher: PbCipher) {
+        self.name = repository.name
+        self.cipher = cipher
+        self.rSA = repository
+        self.rFA = repository
     }
 
     // MARK: Store & Retrieve
     
+    public func store<T>(item: T, to name: String) throws where T : Encodable {
+        assert(rS != nil)
+        try rS!.store(item: try cipher.encrypt(item), to: name)
+    }
+
     public func storeAsync<T>(item: T, to name: String) async throws where T : Encodable {
-        try await repository.storeAsync(item: try encrypt(item), to: name)
+        assert(rSA != nil)
+        try await rSA!.storeAsync(item: try cipher.encrypt(item), to: name)
+    }
+
+    public func retrieve<T>(itemOf type: T.Type, from name: String) throws -> T? where T : Decodable {
+        assert(rS != nil)
+        guard let edata = try rS!.retrieve(itemOf: Data.self, from: name) else { return nil }
+        return try cipher.decrypt(itemOf: type, from: edata)
     }
 
     public func retrieveAsync<T>(itemOf type: T.Type, from name: String) async throws -> T? where T : Decodable {
-        guard let edata = try await repository.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
-        return try decrypt(itemOf: type, from: edata)
+        assert(rSA != nil)
+        guard let edata = try await rSA!.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
+        return try cipher.decrypt(itemOf: type, from: edata)
+    }
+
+    private func edataStream<T>(_ sequence: T) throws -> ThrowingStream<Data, Error> where T : Sequence, T.Element : Encodable {
+        var sequenceIterator = sequence.makeIterator()
+        return ThrowingStream<Data, Error> {
+            guard let item = sequenceIterator.next() else { return nil }
+            return try self.cipher.encrypt(item)
+        }
+    }
+
+    public func store<T>(sequence: T, to name: String) throws where T : Sequence, T.Element : Encodable {
+        assert(rF != nil)
+        try rF!.store(sequence: try edataStream(sequence), to: name)
     }
 
     public func storeAsync<T>(sequence: T, to name: String) async throws where T : Sequence, T.Element : Encodable {
-        var sequenceIterator = sequence.makeIterator()
-        let edataStream = ThrowingStream<Data, Error> {
-            guard let item = sequenceIterator.next() else { return nil }
-            return try self.encrypt(item)
-        }
-        try await repository.storeAsync(sequence: edataStream, to: name)
+        assert(rFA != nil)
+        try await rFA?.storeAsync(sequence: try edataStream(sequence), to: name)
     }
 
+    public func retrieve<T>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>? where T : Decodable {
+        assert(rF != nil)
+        guard let edataStream = try rF!.retrieve(sequenceOf: Data.self, from: name) else { return nil }
+        var edataIterator = edataStream.makeIterator()
+        return ThrowingStream {
+            guard let edata = try edataIterator.nextThrows() else { return nil }
+            return try self.cipher.decrypt(itemOf: type, from: edata)
+        }
+    }
+    
     public func retrieveAsync<T>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>? where T : Decodable {
-        guard let edataStream = try await repository.retrieveAsync(sequenceOf: Data.self, from: name) else { return nil }
+        assert(rFA != nil)
+        guard let edataStream = try await rFA?.retrieveAsync(sequenceOf: Data.self, from: name) else { return nil }
         var edataIterator = edataStream.makeAsyncIterator()
         return AsyncThrowingStream {
             guard let edata = try await edataIterator.next() else { return nil }
-            return try self.decrypt(itemOf: type, from: edata)
+            return try self.cipher.decrypt(itemOf: type, from: edata)
         }
     }
     
     // MARK: Pass-through-only functions
     
+    public func metadata(for name: String) throws -> PbRepository.ItemMetadata? {
+        assert(rF != nil)
+        return try rF!.metadata(for: name)
+    }
+
     public func metadataAsync(for name: String) async throws -> PbRepository.ItemMetadata? {
-        return try await repository.metadataAsync(for: name)
+        assert(rFA != nil)
+        return try await rFA!.metadataAsync(for: name)
     }
     
+    public func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error> {
+        assert(rF != nil)
+        return try rF!.metadata(forAllMatching: isIncluded)
+    }
+
     public func metadataAsync(forAllMatching isIncluded: (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error> {
-        return try await repository.metadataAsync(forAllMatching: isIncluded)
+        assert(rFA != nil)
+        return try await rFA!.metadataAsync(forAllMatching: isIncluded)
     }
     
+    public func rename(_ from: String, to: String) throws -> Bool {
+        assert(rF != nil)
+        return try rF!.rename(from, to: to)
+    }
+
     public func renameAsync(_ from: String, to: String) async throws -> Bool {
-        return try await repository.renameAsync(from, to: to)
+        assert(rFA != nil)
+        return try await rFA!.renameAsync(from, to: to)
     }
     
+    public func delete(_ name: String) throws {
+        assert(rS != nil)
+        try rS!.delete(name)
+    }
+
     public func deleteAsync(_ name: String) async throws {
-        try await repository.deleteAsync(name)
+        assert(rSA != nil)
+        try await rSA!.deleteAsync(name)
     }
 }

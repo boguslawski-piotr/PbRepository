@@ -1,3 +1,7 @@
+/// Swift PbRepository
+/// Copyright (c) Piotr Boguslawski
+/// MIT license, see License.md file for details.
+
 import Foundation
 import PbEssentials
 
@@ -35,7 +39,7 @@ public protocol PbRepository : PbSimpleRepository
     func rename(_ from: String, to: String) throws -> Bool
 
     func store<T: Sequence>(sequence: T, to name: String) throws where T.Element : Encodable
-    func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws -> ThrowingStream<T, Error>?
+    func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>?
 }
 
 public protocol PbRepositoryAsync : PbSimpleRepositoryAsync
