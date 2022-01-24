@@ -14,33 +14,28 @@ public enum PbStoredRepository
 
 public protocol PbStoredConfiguration
 {
-    var id : String { get }
     var repository : PbStoredRepository { get }
-}
-
-open class PbStoredDefaultConfiguration : PbStoredConfiguration, Identifiable
-{
-    public static var repository = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
-
-    open var id : String
-    open var repository : PbStoredRepository
-
-    public init(_ id: String, repository: PbStoredRepository = PbStoredDefaultConfiguration.repository) {
-        self.id = id
-        self.repository = repository
-    }
+    var id : String { get }
 }
 
 @propertyWrapper
-public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservableObject
+public final class PbStored<Value: Codable> : PbPublishedProperty
 {
-    public enum Status {
-        case initializing, retrieving, storing, idle
-        case error(Error)
+    open class DefaultConfiguration : PbStoredConfiguration, Identifiable
+    {
+        open lazy var repository = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
+        open var id : String
+
+        public init(_ id: String)
+        {
+            self.id = id
+        }
     }
+
+    public lazy var retrieving = AnyPublisher(_retrieving)
+    public lazy var storing = AnyPublisher(_storing)
     
-    @PbPublished public var status = PbValueWithLock<Status>(Status.initializing)
-    @PbPublished public var configuration : PbStoredConfiguration
+    public var lastError : PbError?
 
     public var wrappedValue : Value {
         get { value }
@@ -63,7 +58,7 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
     public init(wrappedValue: Value, _ configuration: PbStoredConfiguration) where Value: PbObservableObject {
         self.configuration = configuration
         self.value = wrappedValue
-        valueDidSet = { [weak self] in self?.valueIsAnObservableObject() }
+        valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
         retrieve()
     }
@@ -72,47 +67,51 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
         self.configuration = configuration
         self.value = wrappedValue
         valueDidRetrieve = { [weak self] in self?.value.didRetrieve() }
-        valueDidSet = { [weak self] in self?.valueIsAnObservableObject() }
+        valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
         retrieve()
     }
 
     public convenience init(wrappedValue: Value, _ id: String) {
-        self.init(wrappedValue: wrappedValue, PbStoredDefaultConfiguration(id))
+        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
     }
     
     public convenience init(wrappedValue: Value, _ id: String) where Value: PbStoredProperty {
-        self.init(wrappedValue: wrappedValue, PbStoredDefaultConfiguration(id))
+        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
     }
 
     public convenience init(wrappedValue: Value, _ id: String) where Value: PbObservableObject {
-        self.init(wrappedValue: wrappedValue, PbStoredDefaultConfiguration(id))
+        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
     }
 
     public convenience init(wrappedValue: Value, _ id: String) where Value: PbStoredProperty & PbObservableObject {
-        self.init(wrappedValue: wrappedValue, PbStoredDefaultConfiguration(id))
+        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
     }
 
-    public var parentObjectWillChange : ObservableObjectPublisher?
-    public var parentObjectDidChange : ObservableObjectPublisher?
+    public var _objectWillChange : ObservableObjectPublisher?
+    public var _objectDidChange : ObservableObjectPublisher?
+
+    private let configuration : PbStoredConfiguration
+    private var storeTask : Task.NoResultNoError?
+
+    private lazy var _retrieving = CurrentValueSubject<Bool, Never>(true)
+    private lazy var _storing = CurrentValueSubject<Bool, Never>(false)
 
     private var subscriptions : [AnyCancellable?] = [nil,nil,nil]
     private var valueDidRetrieve : (() -> Void)?
     private var valueDidSet : (() -> Void)?
     private var value : Value
 
-    private func valueIsAnObservableObject() where Value : PbObservableObject {
+    private func subscribeToValue() where Value : PbObservableObject {
         cancelSubscriptions()
         subscriptions[0] = value.objectDidChange.sink { [weak self] _ in
             self?.store()
         }
         subscriptions[1] = value.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
-            self?.parentObjectWillChange?.send()
+            self?._objectWillChange?.send()
         }
         subscriptions[2] = value.objectDidChange.sink { [weak self] _ in
-            self?.objectDidChange.send()
-            self?.parentObjectDidChange?.send()
+            self?._objectDidChange?.send()
         }
     }
 
@@ -128,11 +127,9 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
     }
 
     private func setValue(_ newValue: Value, andStore: Bool = true) {
-        objectWillChange.send()
-        parentObjectWillChange?.send()
+        _objectWillChange?.send()
         value = newValue
-        objectDidChange.send()
-        parentObjectDidChange?.send()
+        _objectDidChange?.send()
         valueDidSet?()
         if andStore {
             store()
@@ -142,25 +139,24 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
     private func perform(_ code: () throws -> Void) {
         do {
             try code()
-            status.value = .idle
         }
         catch {
-            status.value = .error(PbError(error))
+            lastError = PbError(error)
         }
     }
 
     private func perform(_ code: () async throws -> Void) async {
         do {
             try await code()
-            status.value = .idle
         }
         catch {
-            status.value = .error(PbError(error))
+            lastError = PbError(error)
         }
     }
 
     public func retrieve() {
-        status.value = .retrieving
+        _retrieving.send(true)
+        lastError = nil
         switch configuration.repository
         {
         case .sync(let repository):
@@ -170,6 +166,7 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
                     valueDidRetrieve?()
                 }
             }
+            _retrieving.send(false)
 
         case .async(let repository, _):
             Task(priority: .high) {
@@ -180,21 +177,22 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
                         valueDidRetrieve?()
                     }
                 }
+                _retrieving.send(false)
             }
         }
     }
     
-    private var storeTask : Task.NoResultNoError?
-
     public func store() {
-        status.value = .storing
+        _storing.send(true)
+        lastError = nil
         switch configuration.repository
         {
         case .sync(let repository):
             perform {
                 try repository?.store(item: value, to: configuration.id)
             }
-            
+            _storing.send(false)
+
         case .async(let repository, let delayStoringBy):
             storeTask?.cancel()
             storeTask = Task.delayed(by: delayStoringBy, priority: .low) {
@@ -202,6 +200,7 @@ public final class PbStored<Value : Codable> : PbPublishedProperty, PbObservable
                     try await repository?.storeAsync(item: value, to: configuration.id)
                 }
                 storeTask = nil
+                _storing.send(false)
             }
         }
     }
@@ -225,19 +224,15 @@ extension PbPublished: PbStoredProperty
 
 extension PbObservableCollection
 {
+    /**
+    Method called after contents of `ObservableCollection` was retrieved from some storage (see `PbStored.retrieve`).
+    Invoke `didRetrieve` for all elements and it's properties that are declared as `PbStoredProperty`.
+    */
     internal func _didRetrieve() {
-        cancelSubscriptions()
         for element in elements {
-            let objectWillChange = element.objectWillChange
-            let objectDidChange = element.objectDidChange
-            
             var reflection : Mirror? = Mirror(reflecting: element)
             while let aClass = reflection {
                 for (_, property) in aClass.children {
-                    if property is PbPublishedProperty {
-                        _subscriptions.append(objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() })
-                        _subscriptions.append(objectDidChange.sink { [weak self] _ in self?.objectDidChange.send() })
-                    }
                     if let storedProperty = property as? PbStoredProperty {
                         storedProperty.didRetrieve()
                     }

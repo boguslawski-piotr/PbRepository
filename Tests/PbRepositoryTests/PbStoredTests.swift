@@ -13,34 +13,34 @@ public class PbStoredBasicTest: XCTestCase, PbObservableObject
     
     public var c0, c1 : AnyCancellable?
     
-    public func go() {
-        c1 = _stest.objectDidChange
-            .sink {
-                dbg("stest changed")
-            }
-        c0 = objectWillChange
-            .sink {
-                dbg("object changed")
-            }
-        
-        self.ptest = "New value"
-        self.stest = "New value"
-    }
-    
     public func test() {
         try? PbUserDefaultsRepository(name: "").delete("Test")
         
         let test = PbStoredBasicTest()
         dbg(test.stest, "== Initial value")
         XCTAssert(test.stest == "Initial value")
-        test.go()
+        test.step()
         XCTAssert(test.stest == "New value")
         
         let test2 = PbStoredBasicTest()
         dbg(test2.stest, "== New value")
         XCTAssert(test2.stest == "New value")
-        test2.go()
+        test2.step()
         XCTAssert(test2.stest == "New value")
+    }
+
+    public func step() {
+        var changes = 0
+        c0 = objectWillChange
+            .sink {
+                dbg("object changed")
+                changes += 1
+            }
+        
+        self.ptest = "New value"
+        self.stest = "New value"
+        
+        XCTAssert(changes == 2)
     }
 }
 
@@ -133,24 +133,20 @@ class NotesData : PbObservableObject
         }
     }
     
-    var dataStatusSubscription : AnyCancellable?
-    
+    var subscription : AnyCancellable?
+
     init() {
-        dataStatusSubscription = _data.$status.didChange
-            .sink { status in
-                if case .retrieving = status() {
-                    return
-                }
-                
-                self.dataStatusSubscription?.cancel()
-                self.dataDidLoad()
+        subscription = _data.retrieving.sink { v in
+            if !v {
+                self.dataDidRetrieve()
+                self.subscription = nil
             }
+        }
     }
     
-    var dataIsReadyPublisher = ObservableObjectPublisher()
-    
-    func dataDidLoad() {
-        dataIsReadyPublisher.send()
+    func dataDidRetrieve() {
+        objectDidChange.send()
+        dbg("dataDidRetrieve")
     }
     
     func createGroup(_ name : String) -> Group {
@@ -171,15 +167,17 @@ public class NotesApp: XCTestCase
         try? NotesStorage.repo.delete("test")
 
         let notesData1 = NotesData()
-        single(notesData: notesData1, testShouldBe: "Initial value")
+        step(notesData: notesData1, testShouldBe: "Initial value")
         
         XCTAssert(changes == 12)
         XCTAssert(changes == changesInCode)
         XCTAssert(NotesData.notesLoaded == 0)
         XCTAssert(NotesData.noteLoaded == 0)
         
+        Thread.sleep(forTimeInterval: .seconds(1))
+        
         let notesData2 = NotesData()
-        single(notesData: notesData2, testShouldBe: "New value")
+        step(notesData: notesData2, testShouldBe: "New value")
         
         XCTAssert(changes == 15)
         XCTAssert(changes == changesInCode)
@@ -187,7 +185,7 @@ public class NotesApp: XCTestCase
         XCTAssert(NotesData.noteLoaded == 3)
     }
     
-    func single(notesData : NotesData, testShouldBe: String) {
+    func step(notesData : NotesData, testShouldBe: String) {
         dbg("start!")
         
         changes = 0
