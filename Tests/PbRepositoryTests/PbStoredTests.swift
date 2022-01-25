@@ -55,7 +55,7 @@ public class PbStoredBasicTest: XCTestCase, PbObservableObject
 //              Subject
 //              Content
 
-struct NotesStorage : PbStoredConfiguration
+struct Repository
 {
     static var coder : PbCoder {
         let encoder = JSONEncoder()
@@ -63,16 +63,15 @@ struct NotesStorage : PbStoredConfiguration
         return PbCoderBase(JSONDecoder(), encoder)
     }
     
-    static var repo = PbFileManagerRepository(name: "Notes", coder: NotesStorage.coder)
+    static var repository = PbFileManagerRepository(name: "Notes", coder: Repository.coder)
     
-    let repository = PbStoredRepository.sync(repo)
-    let id : String
+    static var notesDataRepository = PbStoredRepository.sync(repository)
 }
 
 class NotesData : PbObservableObject
 {
-    @PbStored(NotesStorage(id: "data")) var data = PbObservableArray<Group>()
-    @PbStored(NotesStorage(id: "test")) var test = "Initial value"
+    @PbStored("data", Repository.notesDataRepository) var data = PbObservableArray<Group>()
+    @PbStored("test", Repository.notesDataRepository) var test = "Initial value"
     
     static var notesLoaded = 0
     static var noteLoaded = 0
@@ -163,8 +162,8 @@ public class NotesApp: XCTestCase
     var changesInCode = 0
     
     func test() {
-        try? NotesStorage.repo.delete("data")
-        try? NotesStorage.repo.delete("test")
+        try? Repository.repository.delete("data")
+        try? Repository.repository.delete("test")
 
         let notesData1 = NotesData()
         step(notesData: notesData1, testShouldBe: "Initial value")
@@ -202,7 +201,7 @@ public class NotesApp: XCTestCase
         changesInCode += 1
         
         // Test LOADED data
-        
+
         if let group = notesData.data.first {
             group.name = "group 1"
             changesInCode += 1

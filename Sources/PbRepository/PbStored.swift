@@ -8,30 +8,15 @@ import PbEssentials
 
 public enum PbStoredRepository
 {
+    public static var `default` = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
+
     case sync(PbSimpleRepository?)
     case async(PbSimpleRepositoryAsync?, delayStoringBy: TimeInterval = .miliseconds(250))
-}
-
-public protocol PbStoredConfiguration
-{
-    var repository : PbStoredRepository { get }
-    var id : String { get }
 }
 
 @propertyWrapper
 public final class PbStored<Value: Codable> : PbPublishedProperty
 {
-    open class DefaultConfiguration : PbStoredConfiguration, Identifiable
-    {
-        open lazy var repository = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
-        open var id : String
-
-        public init(_ id: String)
-        {
-            self.id = id
-        }
-    }
-
     public lazy var retrieving = AnyPublisher(_retrieving)
     public lazy var storing = AnyPublisher(_storing)
     
@@ -42,59 +27,48 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
         set { setValue(newValue) }
     }
 
-    public init(wrappedValue: Value, _ configuration: PbStoredConfiguration) {
-        self.configuration = configuration
+    public init(wrappedValue: Value, _ name: String, _ repository: PbStoredRepository? = PbStoredRepository.default) {
+        self.repository = repository
+        self.name = name
         self.value = wrappedValue
         retrieve()
     }
 
-    public init(wrappedValue: Value, _ configuration: PbStoredConfiguration) where Value: PbStoredProperty {
-        self.configuration = configuration
+    public init(wrappedValue: Value, _ name: String, _ repository: PbStoredRepository? = PbStoredRepository.default) where Value: PbStoredProperty {
+        self.repository = repository
+        self.name = name
         self.value = wrappedValue
         valueDidRetrieve = { [weak self] in self?.value.didRetrieve() }
         retrieve()
     }
 
-    public init(wrappedValue: Value, _ configuration: PbStoredConfiguration) where Value: PbObservableObject {
-        self.configuration = configuration
+    public init(wrappedValue: Value, _ name: String, _ repository: PbStoredRepository? = PbStoredRepository.default) where Value: PbObservableObject {
+        self.repository = repository
+        self.name = name
         self.value = wrappedValue
         valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
         retrieve()
     }
 
-    public init(wrappedValue: Value, _ configuration: PbStoredConfiguration) where Value: PbStoredProperty & PbObservableObject {
-        self.configuration = configuration
+    public init(wrappedValue: Value, _ name: String, _ repository: PbStoredRepository? = PbStoredRepository.default) where Value: PbStoredProperty & PbObservableObject {
+        self.repository = repository
+        self.name = name
         self.value = wrappedValue
         valueDidRetrieve = { [weak self] in self?.value.didRetrieve() }
         valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
         retrieve()
-    }
-
-    public convenience init(wrappedValue: Value, _ id: String) {
-        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
-    }
-    
-    public convenience init(wrappedValue: Value, _ id: String) where Value: PbStoredProperty {
-        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
-    }
-
-    public convenience init(wrappedValue: Value, _ id: String) where Value: PbObservableObject {
-        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
-    }
-
-    public convenience init(wrappedValue: Value, _ id: String) where Value: PbStoredProperty & PbObservableObject {
-        self.init(wrappedValue: wrappedValue, DefaultConfiguration(id))
     }
 
     public var _objectWillChange : ObservableObjectPublisher?
     public var _objectDidChange : ObservableObjectPublisher?
 
-    private let configuration : PbStoredConfiguration
-    private var storeTask : Task.NoResultNoError?
+    private var name : String
+    private var repository : PbStoredRepository?
+    private var storeTask : Task.NoResultCanThrow?
 
-    private lazy var _retrieving = CurrentValueSubject<Bool, Never>(true)
+    private lazy var _retrieving = CurrentValueSubject<Bool, Never>(false)
     private lazy var _storing = CurrentValueSubject<Bool, Never>(false)
 
     private var subscriptions : [AnyCancellable?] = [nil,nil,nil]
@@ -154,14 +128,21 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
         }
     }
 
-    public func retrieve() {
+    public func retrieve(_ repository: PbStoredRepository? = nil) {
+        if repository != nil {
+            self.repository = repository
+        }
+        guard self.repository != nil else {
+            return
+        }
+        
         _retrieving.send(true)
         lastError = nil
-        switch configuration.repository
+        switch self.repository!
         {
         case .sync(let repository):
             perform {
-                if let v = try repository?.retrieve(itemOf: Value.self, from: configuration.id) {
+                if let v = try repository?.retrieve(itemOf: Value.self, from: self.name) {
                     setValue(v, andStore: false)
                     valueDidRetrieve?()
                 }
@@ -172,9 +153,11 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
             Task(priority: .high) {
                 await perform {
 //                    try await Task.sleep(for: .seconds(1))
-                    if let v = try await repository?.retrieveAsync(itemOf: Value.self, from: configuration.id) {
-                        setValue(v, andStore: false)
-                        valueDidRetrieve?()
+                    if let v = try await repository?.retrieveAsync(itemOf: Value.self, from: self.name) {
+//                        DispatchQueue.main.async {
+                            self.setValue(v, andStore: false)
+                            self.valueDidRetrieve?()
+//                        }
                     }
                 }
                 _retrieving.send(false)
@@ -183,13 +166,14 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
     }
     
     public func store() {
+        guard repository != nil else { return }
         _storing.send(true)
         lastError = nil
-        switch configuration.repository
+        switch repository!
         {
         case .sync(let repository):
             perform {
-                try repository?.store(item: value, to: configuration.id)
+                try repository?.store(item: value, to: name)
             }
             _storing.send(false)
 
@@ -197,7 +181,7 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
             storeTask?.cancel()
             storeTask = Task.delayed(by: delayStoringBy, priority: .low) {
                 await perform {
-                    try await repository?.storeAsync(item: value, to: configuration.id)
+                    try await repository?.storeAsync(item: value, to: name)
                 }
                 storeTask = nil
                 _storing.send(false)
