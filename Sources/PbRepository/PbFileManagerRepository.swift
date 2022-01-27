@@ -4,14 +4,11 @@
 
 import System
 import Foundation
-import AppleArchive
 import PbEssentials
 
 @available(macOS 11.0, iOS 14.0, tvOS 14.0, watchOS 7.0, *)
 final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 {
-    public typealias Compression = ArchiveCompression
-
     public struct FileMetadata : PbRepository.ItemMetadata
     {
         public var name : String
@@ -31,16 +28,25 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 
     private let baseUrl : URL
     private let coder : PbCoder
+    private let compressor : PbCompressorProtocol?
+    private let decompressor : PbDecompressorProtocol?
     private let fileManager : FileManager
-    private let compression : ArchiveCompression
 
-    public init(name: String, compression: Compression = .none, coder: PbCoder? = nil, baseUrl: URL? = nil, fileManager: FileManager? = nil) {
+    public init(
+        name: String,
+        coder: PbCoder? = nil,
+        compressor : PbCompressorProtocol? = nil,
+        decompressor : PbDecompressorProtocol? = nil,
+        baseUrl: URL? = nil,
+        fileManager: FileManager? = nil
+    ) {
         self.name = name
-        self.compression = compression
         self.coder = coder ?? PropertyListCoder()
+        self.compressor = compressor
+        self.decompressor = decompressor
         
         let fileManager = fileManager ?? FileManager.default
-        var url = fileManager.homeDirectoryForCurrentUser
+        var url = URL(fileURLWithPath: NSHomeDirectory())
         url.appendPathComponent(Bundle.main.name)
         self.baseUrl = baseUrl ?? url
         self.fileManager = fileManager
@@ -94,7 +100,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     public func store<T: Encodable>(item: T, to name: String) throws {
         let fileUrl = try fileUrl(name)
         let data = try coder.encode(item)
-        try data.write(to: fileUrl, compression: compression)
+        try data.write(to: fileUrl, compressor: compressor)
     }
     
     public func storeAsync<T: Encodable>(item: T, to name: String) async throws {
@@ -103,12 +109,12 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     
     public func store<T: Sequence>(sequence: T, to name: String) throws where T.Element: Encodable {
         let fileUrl = try fileUrl(name)
-        if compression == .none {
+        if compressor == nil {
             try store(item: sequence.map({$0}), to: name)
         }
         else {
-            let compressedFile = try PbCompressor(toFile: fileUrl.path, compression: compression)
-            try sequence.forEach({ element in try compressedFile.append(data: try coder.encode(element)) })
+            let compressedFile = try compressor?.create(file: fileUrl.path, permissions: nil)
+            try sequence.forEach({ element in try compressedFile?.append(data: try coder.encode(element), withName: nil) })
         }
     }
     
@@ -120,7 +126,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         
-        let data = try Data(contentsOf: fileUrl, decompress: compression != .none)
+        let data = try Data(contentsOf: fileUrl, decompressor: decompressor)
         return try coder.decode(T.self, from: data)
     }
     
@@ -132,16 +138,16 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         
-        if compression == .none {
+        if decompressor == nil {
             var iterator = try coder.decode([T].self, from: try Data(contentsOf: fileUrl)).makeIterator()
             return ThrowingStream {
                 return iterator.next()
             }
         }
         else {
-            let iterator = try PbDecompressor(fromFile: fileUrl.path)
+            let compressedFile = try decompressor?.open(file: fileUrl.path, permissions: nil)
             return ThrowingStream {
-                guard let data = try iterator.nextThrows() else { return nil }
+                guard let data = try compressedFile?.read() else { return nil }
                 return try self.coder.decode(T.self, from: data)
             }
         }
@@ -151,17 +157,18 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
 
-        if compression == .none {
+        if decompressor == nil {
             var iterator = try coder.decode([T].self, from: try Data(contentsOf: fileUrl)).makeIterator()
             return AsyncThrowingStream {
+                try Task.checkCancellation()
                 return iterator.next()
             }
         }
         else {
-            let asyncIterator = try PbDecompressor(fromFile: fileUrl.path).makeAsyncIterator()
+            let compressedFile = try decompressor?.open(file: fileUrl.path, permissions: nil)
             return AsyncThrowingStream {
                 try Task.checkCancellation()
-                guard let data = try await asyncIterator.next() else { return nil }
+                guard let data = try compressedFile?.read() else { return nil }
                 return try self.coder.decode(T.self, from: data)
             }
         }
