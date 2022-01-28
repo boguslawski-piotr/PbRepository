@@ -8,7 +8,10 @@ import PbEssentials
 
 public enum PbStoredRepository
 {
-    public static var `default` = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
+    public static var `propertyList` = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: PropertyListCoder()))
+    public static var `json` = PbStoredRepository.sync(PbUserDefaultsRepository(name: "", coder: JSONCoder()))
+
+    public static var `default` = json
 
     case sync(PbSimpleRepository?)
     case async(PbSimpleRepositoryAsync?, delayStoringBy: TimeInterval = .miliseconds(250))
