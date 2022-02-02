@@ -28,22 +28,19 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 
     private let baseUrl : URL
     private let coder : PbCoder
-    private let compressor : PbCompressorProtocol?
-    private let decompressor : PbDecompressorProtocol?
+    private let archiver : PbArchiver?
     private let fileManager : FileManager
 
     public init(
         name: String,
         coder: PbCoder? = nil,
-        compressor : PbCompressorProtocol? = nil,
-        decompressor : PbDecompressorProtocol? = nil,
+        archiver : PbArchiver? = nil,
         baseUrl: URL? = nil,
         fileManager: FileManager? = nil
     ) {
         self.name = name
         self.coder = coder ?? PropertyListCoder()
-        self.compressor = compressor
-        self.decompressor = decompressor
+        self.archiver = archiver
         
         let fileManager = fileManager ?? FileManager.default
         var url = URL(fileURLWithPath: NSHomeDirectory())
@@ -100,7 +97,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     public func store<T: Encodable>(item: T, to name: String) throws {
         let fileUrl = try fileUrl(name)
         let data = try coder.encode(item)
-        try data.write(to: fileUrl, compressor: compressor)
+        try data.write(to: fileUrl, compressor: archiver?.makeCompressor())
     }
     
     public func storeAsync<T: Encodable>(item: T, to name: String) async throws {
@@ -109,12 +106,14 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     
     public func store<T: Sequence>(sequence: T, to name: String) throws where T.Element: Encodable {
         let fileUrl = try fileUrl(name)
-        if compressor == nil {
+        if archiver == nil {
             try store(item: sequence.map({$0}), to: name)
         }
         else {
-            let compressedFile = try compressor?.create(file: fileUrl.path, permissions: nil)
-            try sequence.forEach({ element in try compressedFile?.append(data: try coder.encode(element), withName: nil) })
+            var cf = archiver!.makeCompressor()
+            try cf.create(file: fileUrl.path, permissions: nil)
+            try sequence.forEach({ element in try cf.append(data: try coder.encode(element), withName: nil) })
+            try cf.close()
         }
     }
     
@@ -126,7 +125,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         
-        let data = try Data(contentsOf: fileUrl, decompressor: decompressor)
+        let data = try Data(contentsOf: fileUrl, decompressor: archiver?.makeDecompressor())
         return try coder.decode(T.self, from: data)
     }
     
@@ -138,16 +137,20 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         
-        if decompressor == nil {
+        if archiver == nil {
             var iterator = try coder.decode([T].self, from: try Data(contentsOf: fileUrl)).makeIterator()
             return ThrowingStream {
                 return iterator.next()
             }
         }
         else {
-            let compressedFile = try decompressor?.open(file: fileUrl.path, permissions: nil)
+            var df = archiver!.makeDecompressor()
+            try df.open(file: fileUrl.path, permissions: nil)
             return ThrowingStream {
-                guard let data = try compressedFile?.read() else { return nil }
+                guard let data = try df.read() else {
+                    try df.close()
+                    return nil
+                }
                 return try self.coder.decode(T.self, from: data)
             }
         }
@@ -157,7 +160,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
 
-        if decompressor == nil {
+        if archiver == nil {
             var iterator = try coder.decode([T].self, from: try Data(contentsOf: fileUrl)).makeIterator()
             return AsyncThrowingStream {
                 try Task.checkCancellation()
@@ -165,10 +168,14 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
             }
         }
         else {
-            let compressedFile = try decompressor?.open(file: fileUrl.path, permissions: nil)
+            var df = archiver!.makeDecompressor()
+            try df.open(file: fileUrl.path, permissions: nil)
             return AsyncThrowingStream {
                 try Task.checkCancellation()
-                guard let data = try compressedFile?.read() else { return nil }
+                guard let data = try df.read() else {
+                    try df.close()
+                    return nil
+                }
                 return try self.coder.decode(T.self, from: data)
             }
         }
