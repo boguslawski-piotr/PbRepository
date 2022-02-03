@@ -157,10 +157,8 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
                 await perform {
 //                    try await Task.sleep(for: .seconds(1))
                     if let v = try await repository?.retrieveAsync(itemOf: Value.self, from: self.name) {
-//                        DispatchQueue.main.async {
-                            self.setValue(v, andStore: false)
-                            self.valueDidRetrieve?()
-//                        }
+                        self.setValue(v, andStore: false)
+                        self.valueDidRetrieve?()
                     }
                 }
                 _retrieving.send(false)
@@ -170,6 +168,8 @@ public final class PbStored<Value: Codable> : PbPublishedProperty
     
     public func store() {
         guard repository != nil else { return }
+        guard _retrieving.value == false else { return }
+        
         _storing.send(true)
         lastError = nil
         switch repository!
