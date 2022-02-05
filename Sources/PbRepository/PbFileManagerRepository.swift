@@ -49,7 +49,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         self.fileManager = fileManager
     }
     
-    private func repositoryUrl() throws -> URL {
+    public func repositoryUrl() throws -> URL {
         var url = baseUrl
         url.appendPathComponent(self.name)
         if !fileManager.fileExists(atPath: url.path) {
@@ -58,7 +58,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         return url
     }
     
-    private func fileUrl(_ fileName: String) throws -> URL {
+    public func fileUrl(_ fileName: String) throws -> URL {
         var url = try repositoryUrl()
         url.appendPathComponent(fileName)
         return url
