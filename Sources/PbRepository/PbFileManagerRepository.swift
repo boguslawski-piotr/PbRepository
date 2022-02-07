@@ -26,9 +26,9 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 
     public private(set) var name : String
 
-    private let baseUrl : URL
     private let coder : PbCoder
     private let archiver : PbArchiver?
+    private let baseUrl : URL
     private let fileManager : FileManager
 
     public init(
@@ -41,17 +41,12 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         self.name = name
         self.coder = coder ?? PropertyListCoder()
         self.archiver = archiver
-        
-        let fileManager = fileManager ?? FileManager.default
-        var url = URL(fileURLWithPath: NSHomeDirectory())
-        url.appendPathComponent(Bundle.main.name)
-        self.baseUrl = baseUrl ?? url
-        self.fileManager = fileManager
+        self.baseUrl = baseUrl ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent)
+        self.fileManager = fileManager ?? FileManager.default
     }
     
     public func repositoryUrl() throws -> URL {
-        var url = baseUrl
-        url.appendPathComponent(self.name)
+        let url = baseUrl.appendingPathComponent(self.name.asPathComponent)
         if !fileManager.fileExists(atPath: url.path) {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         }
@@ -59,8 +54,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     }
     
     public func fileUrl(_ fileName: String) throws -> URL {
-        var url = try repositoryUrl()
-        url.appendPathComponent(fileName)
+        let url = try repositoryUrl().appendingPathComponent(fileName.asPathComponent)
         return url
     }
     
@@ -77,7 +71,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     }
     
     public func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error> {
-        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).filter({ try isIncluded($0) }).makeIterator()
+        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy.filter({ try isIncluded($0) }).makeIterator()
         return ThrowingStream {
             guard let name = itemNames.next() else { return nil }
             guard let meta = try self.metadata(for: name) else { throw Errno.noSuchFileOrDirectory }
@@ -86,7 +80,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     }
 
     public func metadataAsync(forAllMatching isIncluded: (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error> {
-        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).filter({ try isIncluded($0) }).makeIterator()
+        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy.filter({ try isIncluded($0) }).makeIterator()
         return AsyncThrowingStream {
             guard let name = itemNames.next() else { return nil }
             guard let meta = try await self.metadataAsync(for: name) else { throw Errno.noSuchFileOrDirectory }
