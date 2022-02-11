@@ -41,12 +41,12 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         self.name = name
         self.coder = coder ?? PropertyListCoder()
         self.archiver = archiver
-        self.baseUrl = baseUrl ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent)
+        self.baseUrl = baseUrl ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent())
         self.fileManager = fileManager ?? FileManager.default
     }
     
     public func repositoryUrl() throws -> URL {
-        let url = baseUrl.appendingPathComponent(self.name.asPathComponent)
+        let url = baseUrl.appendingPathComponent(self.name.asPathComponent())
         if !fileManager.fileExists(atPath: url.path) {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         }
@@ -54,7 +54,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     }
     
     public func fileUrl(_ fileName: String) throws -> URL {
-        let url = try repositoryUrl().appendingPathComponent(fileName.asPathComponent)
+        let url = try repositoryUrl().appendingPathComponent(fileName.asPathComponent())
         return url
     }
     
