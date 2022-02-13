@@ -32,9 +32,7 @@ open class PbCompressedRepository: PbRepositoryDecoratorBase, PbRepository, PbRe
 
     open func retrieveAsync<T>(itemOf type: T.Type, from name: String) async throws -> T?
     where T: Decodable {
-        guard let edata = try await rSA!.retrieveAsync(itemOf: Data.self, from: name) else {
-            return nil
-        }
+        guard let edata = try await rSA!.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
         return try archiver!.decompress(itemOf: type, from: edata)
     }
 
@@ -56,12 +54,9 @@ open class PbCompressedRepository: PbRepositoryDecoratorBase, PbRepository, PbRe
         try await rFA?.storeAsync(sequence: try compressingStream(sequence), to: name)
     }
 
-    open func retrieve<T>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<
-        T, Error
-    >? where T: Decodable {
-        guard
-            var compressedDataIterator = try rF!.retrieve(sequenceOf: Data.self, from: name)?
-                .makeIterator()
+    open func retrieve<T>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>?
+    where T: Decodable {
+        guard var compressedDataIterator = try rF!.retrieve(sequenceOf: Data.self, from: name)?.makeIterator()
         else { return nil }
         return ThrowingStream {
             guard let cdata = try compressedDataIterator.nextThrows() else { return nil }
@@ -69,12 +64,8 @@ open class PbCompressedRepository: PbRepositoryDecoratorBase, PbRepository, PbRe
         }
     }
 
-    open func retrieveAsync<T>(sequenceOf type: T.Type, from name: String) async throws
-        -> AsyncThrowingStream<T, Error>? where T: Decodable
-    {
-        guard
-            var compressedDataIterator = try await rFA?.retrieveAsync(sequenceOf: Data.self, from: name)?
-                .makeAsyncIterator()
+    open func retrieveAsync<T>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>? where T: Decodable {
+        guard var compressedDataIterator = try await rFA?.retrieveAsync(sequenceOf: Data.self, from: name)?.makeAsyncIterator()
         else { return nil }
         return AsyncThrowingStream {
             guard let cdata = try await compressedDataIterator.next() else { return nil }

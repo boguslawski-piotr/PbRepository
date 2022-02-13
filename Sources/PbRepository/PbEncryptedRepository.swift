@@ -32,9 +32,7 @@ open class PbEncryptedRepository: PbRepositoryDecoratorBase, PbRepository, PbRep
 
     open func retrieveAsync<T>(itemOf type: T.Type, from name: String) async throws -> T?
     where T: Decodable {
-        guard let edata = try await rSA!.retrieveAsync(itemOf: Data.self, from: name) else {
-            return nil
-        }
+        guard let edata = try await rSA!.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
         return try cipher!.decrypt(itemOf: type, from: edata)
     }
 
@@ -56,12 +54,8 @@ open class PbEncryptedRepository: PbRepositoryDecoratorBase, PbRepository, PbRep
         try await rFA?.storeAsync(sequence: try encryptingStream(sequence), to: name)
     }
 
-    open func retrieve<T>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<
-        T, Error
-    >? where T: Decodable {
-        guard
-            var encryptedDataIterator = try rF!.retrieve(sequenceOf: Data.self, from: name)?
-                .makeIterator()
+    open func retrieve<T>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>? where T: Decodable {
+        guard var encryptedDataIterator = try rF!.retrieve(sequenceOf: Data.self, from: name)?.makeIterator()
         else { return nil }
         return ThrowingStream {
             guard let edata = try encryptedDataIterator.nextThrows() else { return nil }
@@ -69,12 +63,8 @@ open class PbEncryptedRepository: PbRepositoryDecoratorBase, PbRepository, PbRep
         }
     }
 
-    open func retrieveAsync<T>(sequenceOf type: T.Type, from name: String) async throws
-        -> AsyncThrowingStream<T, Error>? where T: Decodable
-    {
-        guard
-            var encryptedDataIterator = try await rFA?.retrieveAsync(sequenceOf: Data.self, from: name)?
-                .makeAsyncIterator()
+    open func retrieveAsync<T>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>? where T: Decodable {
+        guard var encryptedDataIterator = try await rFA?.retrieveAsync(sequenceOf: Data.self, from: name)?.makeAsyncIterator()
         else { return nil }
         return AsyncThrowingStream {
             guard let edata = try await encryptedDataIterator.next() else { return nil }

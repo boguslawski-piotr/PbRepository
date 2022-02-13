@@ -28,8 +28,8 @@ final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
     public enum DistributingFilesRules {
         case custom(distributor: (String) -> String)
         case flat,
-            firstCharacter,
-            lastCharacter
+             firstCharacter,
+             lastCharacter
     }
 
     public private(set) var name: String
@@ -49,11 +49,7 @@ final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         self.name = name
         self.distributingFilesRule = distributingFilesRule
         self.coder = coder ?? PropertyListCoder()
-        self.baseUrl =
-            baseUrl
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(
-                Bundle.main.name.asPathComponent()
-            )
+        self.baseUrl = baseUrl ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent())
         self.fileManager = fileManager ?? FileManager.default
     }
 
@@ -110,9 +106,9 @@ final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         try metadata(for: name)
     }
 
-    public func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<
-        PbRepository.ItemMetadata, Error
-    > {
+    public func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws
+        -> ThrowingStream<PbRepository.ItemMetadata, Error>
+    {
         var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy
             .filter({ try isIncluded($0) }).makeIterator()
         return ThrowingStream {

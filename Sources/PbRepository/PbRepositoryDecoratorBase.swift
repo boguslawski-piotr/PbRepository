@@ -43,9 +43,9 @@ open class PbRepositoryDecoratorBase {
         return try await rFA!.metadataAsync(for: name)
     }
 
-    open func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<
-        PbRepository.ItemMetadata, Error
-    > {
+    open func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws
+        -> ThrowingStream<PbRepository.ItemMetadata, Error>
+    {
         return try rF!.metadata(forAllMatching: isIncluded)
     }
 
