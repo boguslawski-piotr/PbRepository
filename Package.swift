@@ -8,7 +8,8 @@ let package = Package(
     products: [
         .library(
             name: "PbRepository",
-            targets: ["PbRepository"]),
+            targets: ["PbRepository"]
+        )
     ],
     dependencies: [
         .package(path: "../PbEssentials")
@@ -16,9 +17,11 @@ let package = Package(
     targets: [
         .target(
             name: "PbRepository",
-            dependencies: ["PbEssentials"]),
+            dependencies: ["PbEssentials"]
+        ),
         .testTarget(
             name: "PbRepositoryTests",
-            dependencies: ["PbEssentials", "PbRepository"]),
+            dependencies: ["PbEssentials", "PbRepository"]
+        ),
     ]
 )
