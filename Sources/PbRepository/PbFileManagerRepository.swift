@@ -2,15 +2,12 @@
 /// Copyright (c) Piotr Boguslawski
 /// MIT license, see License.md file for details.
 
-import System
 import Foundation
 import PbEssentials
 
-@available(macOS 11.0, iOS 14.0, tvOS 14.0, watchOS 7.0, *)
 final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
 {
-    public struct FileMetadata : PbRepository.ItemMetadata
-    {
+    public struct FileMetadata : PbRepository.ItemMetadata {
         public var name : String
         public var size : Int?
         public var createdOn : Date?
@@ -65,9 +62,10 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
     }
     
     public func fileUrl(_ fileName: String) throws -> URL {
+        let fileName = fileName.asPathComponent()
         var url = try repositoryUrl()
         var dirName = ""
-        
+
         switch distributingFilesRule {
         case .flat:
             break
@@ -84,7 +82,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
             url.appendPathComponent(dirName)
             try createDirectory(at: url)
         }
-        return url.appendingPathComponent(fileName.asPathComponent())
+        return url.appendingPathComponent(fileName)
     }
     
     public func metadata(for name: String) throws -> PbRepository.ItemMetadata? {
@@ -103,7 +101,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy.filter({ try isIncluded($0) }).makeIterator()
         return ThrowingStream {
             guard let name = itemNames.next() else { return nil }
-            guard let meta = try self.metadata(for: name) else { throw Errno.noSuchFileOrDirectory }
+            guard let meta = try self.metadata(for: name) else { return nil }
             return meta
         }
     }
@@ -112,7 +110,7 @@ final public class PbFileManagerRepository : PbRepository, PbRepositoryAsync
         var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy.filter({ try isIncluded($0) }).makeIterator()
         return AsyncThrowingStream {
             guard let name = itemNames.next() else { return nil }
-            guard let meta = try await self.metadataAsync(for: name) else { throw Errno.noSuchFileOrDirectory }
+            guard let meta = try await self.metadataAsync(for: name) else { return nil }
             return meta
         }
     }
