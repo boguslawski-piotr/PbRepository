@@ -60,7 +60,7 @@ struct Repository {
     static var coder: PbCoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        return PbCoderBase(JSONDecoder(), encoder)
+        return JSONCoder(encoder: encoder)
     }
 
     static var repository = PbFileManagerRepository(name: "Notes", coder: Repository.coder)

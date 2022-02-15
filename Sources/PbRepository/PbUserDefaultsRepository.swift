@@ -5,15 +5,15 @@
 import Foundation
 import PbEssentials
 
-final public class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleRepositoryAsync {
+public final class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleRepositoryAsync {
     public let name: String
     private let coder: PbCoder
     private let userDefaults: UserDefaults
 
-    public init(name: String, coder: PbCoder? = nil, userDefaults: UserDefaults? = nil) {
+    public init(name: String, coder: PbCoder = PropertyListCoder(), userDefaults: UserDefaults = UserDefaults.standard) {
         self.name = name
-        self.coder = coder ?? PropertyListCoder()
-        self.userDefaults = userDefaults ?? UserDefaults.standard
+        self.coder = coder
+        self.userDefaults = userDefaults
     }
 
     public func delete(_ name: String) throws {

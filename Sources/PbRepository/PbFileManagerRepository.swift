@@ -5,7 +5,7 @@
 import Foundation
 import PbEssentials
 
-final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
+public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
     public struct FileMetadata: PbRepository.ItemMetadata {
         public var name: String
         public var size: Int?
@@ -32,7 +32,7 @@ final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
              lastCharacter
     }
 
-    public private(set) var name: String
+    public var name: String
 
     private let distributingFilesRule: DistributingFilesRules
     private let coder: PbCoder
@@ -41,16 +41,16 @@ final public class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
 
     public init(
         name: String,
+        coder: PbCoder = PropertyListCoder(),
         distributingFilesRule: DistributingFilesRules = .flat,
-        coder: PbCoder? = nil,
-        baseUrl: URL? = nil,
-        fileManager: FileManager? = nil
+        baseUrl: URL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent()),
+        fileManager: FileManager = FileManager.default
     ) {
         self.name = name
         self.distributingFilesRule = distributingFilesRule
-        self.coder = coder ?? PropertyListCoder()
-        self.baseUrl = baseUrl ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(Bundle.main.name.asPathComponent())
-        self.fileManager = fileManager ?? FileManager.default
+        self.coder = coder
+        self.baseUrl = baseUrl
+        self.fileManager = fileManager
     }
 
     private func createDirectory(at url: URL) throws {
