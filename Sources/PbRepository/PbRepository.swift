@@ -30,7 +30,7 @@ public protocol PbRepository: PbSimpleRepository {
     typealias ItemMetadata = StoredItemMetadata
 
     func metadata(for name: String) throws -> ItemMetadata?
-    func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<ItemMetadata, Error>
+    func metadata(forAllMatching isIncluded: @escaping (String) throws -> Bool) throws -> ThrowingStream<ItemMetadata, Error>
 
     func rename(_ from: String, to: String) throws -> Bool
 
@@ -42,7 +42,7 @@ public protocol PbRepositoryAsync: PbSimpleRepositoryAsync {
     typealias ItemMetadata = StoredItemMetadata
 
     func metadataAsync(for name: String) async throws -> ItemMetadata?
-    func metadataAsync(forAllMatching isIncluded: (String) throws -> Bool) async throws -> AsyncThrowingStream<ItemMetadata, Error>
+    func metadataAsync(forAllMatching isIncluded: @escaping (String) throws -> Bool) async throws -> AsyncThrowingStream<ItemMetadata, Error>
 
     func renameAsync(_ from: String, to: String) async throws -> Bool
 

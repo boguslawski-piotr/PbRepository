@@ -31,7 +31,7 @@ public extension PbRepositoryDecorator where Repository: PbRepository {
         return try repository.metadata(for: name)
     }
     
-    func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error> {
+    func metadata(forAllMatching isIncluded: @escaping (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error> {
         return try repository.metadata(forAllMatching: isIncluded)
     }
     
@@ -45,7 +45,7 @@ public extension PbRepositoryDecorator where Repository: PbRepositoryAsync {
         return try await repository.metadataAsync(for: name)
     }
     
-    func metadataAsync(forAllMatching isIncluded: (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error> {
+    func metadataAsync(forAllMatching isIncluded: @escaping (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error> {
         return try await repository.metadataAsync(forAllMatching: isIncluded)
     }
     

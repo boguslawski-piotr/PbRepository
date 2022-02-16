@@ -62,6 +62,7 @@ extension PbCompressedRepository where Repository: PbSimpleRepositoryAsync {
 
     public func retrieveAsync<T>(itemOf type: T.Type, from name: String) async throws -> T? where T: Decodable {
         guard let edata = try await repository.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
+        try Task.checkCancellation()
         return try compressorDecompressor.decompress(itemOf: type, from: edata, decoder: coder)
     }
 }
@@ -75,6 +76,7 @@ extension PbCompressedRepository where Repository: PbRepositoryAsync {
         guard var compressedDataIterator = try await repository.retrieveAsync(sequenceOf: Data.self, from: name)?.makeAsyncIterator()
         else { return nil }
         return AsyncThrowingStream {
+            try Task.checkCancellation()
             guard let cdata = try await compressedDataIterator.next() else { return nil }
             return try self.compressorDecompressor.decompress(itemOf: type, from: cdata, decoder: self.coder)
         }

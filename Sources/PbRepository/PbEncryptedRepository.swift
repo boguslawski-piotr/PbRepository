@@ -63,6 +63,7 @@ extension PbEncryptedRepository where Repository: PbSimpleRepositoryAsync {
     public func retrieveAsync<T>(itemOf type: T.Type, from name: String) async throws -> T?
     where T: Decodable {
         guard let edata = try await repository.retrieveAsync(itemOf: Data.self, from: name) else { return nil }
+        try Task.checkCancellation()
         return try cipher.decrypt(itemOf: type, from: edata, decoder: coder)
     }
 }
@@ -77,6 +78,7 @@ extension PbEncryptedRepository where Repository: PbRepositoryAsync {
         guard var encryptedDataIterator = try await repository.retrieveAsync(sequenceOf: Data.self, from: name)?.makeAsyncIterator()
         else { return nil }
         return AsyncThrowingStream {
+            try Task.checkCancellation()
             guard let edata = try await encryptedDataIterator.next() else { return nil }
             return try self.cipher.decrypt(itemOf: type, from: edata, decoder: self.coder)
         }

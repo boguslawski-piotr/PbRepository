@@ -32,7 +32,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
              lastCharacter
     }
 
-    public var name: String
+    public let name: String
 
     private let distributingFilesRule: DistributingFilesRules
     private let coder: PbCoder
@@ -81,7 +81,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
             dirName = distributor(fileName)
             break
         }
-
+        
         if !dirName.isEmpty {
             url.appendPathComponent(dirName)
             try createDirectory(at: url)
@@ -106,25 +106,39 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         try metadata(for: name)
     }
 
-    public func metadata(forAllMatching isIncluded: (String) throws -> Bool) throws
-        -> ThrowingStream<PbRepository.ItemMetadata, Error>
+    private func itemNames(matching isIncluded: @escaping (String) throws -> Bool) throws -> [String] {
+        var itemNames = [String]()
+        if let filesEnumerator = fileManager.enumerator(at: try repositoryUrl(), includingPropertiesForKeys: nil) {
+            for case let fileUrl as URL in filesEnumerator {
+                if !fileUrl.hasDirectoryPath {
+                    let name = fileUrl.lastPathComponent
+                    if try isIncluded(name) {
+                        itemNames.append(name)
+                    }
+                }
+                try Task.checkCancellation()
+            }
+        }
+        return itemNames
+    }
+
+    public func metadata(forAllMatching isIncluded: @escaping (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error>
     {
-        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy
-            .filter({ try isIncluded($0) }).makeIterator()
+        var itemNamesIterator = try itemNames(matching: isIncluded).makeIterator()
         return ThrowingStream {
-            guard let name = itemNames.next() else { return nil }
+            guard let name = itemNamesIterator.next() else { return nil }
             guard let meta = try self.metadata(for: name) else { return nil }
             return meta
         }
     }
 
-    public func metadataAsync(forAllMatching isIncluded: (String) throws -> Bool) async throws
-        -> AsyncThrowingStream<PbRepository.ItemMetadata, Error>
+    public func metadataAsync(forAllMatching isIncluded: @escaping (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error>
     {
-        var itemNames = try fileManager.contentsOfDirectory(atPath: try repositoryUrl().path).lazy
-            .filter({ try isIncluded($0) }).makeIterator()
+        // TODO: Make it more asynchronous: use fileManager.enumerator.nextObject inside AsyncThrowingStream closure.
+        var itemNamesIterator = try itemNames(matching: isIncluded).makeIterator()
         return AsyncThrowingStream {
-            guard let name = itemNames.next() else { return nil }
+            try Task.checkCancellation()
+            guard let name = itemNamesIterator.next() else { return nil }
             guard let meta = try await self.metadataAsync(for: name) else { return nil }
             return meta
         }
@@ -144,8 +158,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         try store(item: sequence.map({ $0 }), to: name)
     }
 
-    public func storeAsync<T: Sequence>(sequence: T, to name: String) async throws
-    where T.Element: Encodable {
+    public func storeAsync<T: Sequence>(sequence: T, to name: String) async throws where T.Element: Encodable {
         try store(sequence: sequence, to: name)
     }
 
@@ -160,8 +173,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         try retrieve(itemOf: type, from: name)
     }
 
-    public func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws
-        -> ThrowingStream<T, Error>?
+    public func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>?
     {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
@@ -171,8 +183,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func retrieveAsync<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws
-        -> AsyncThrowingStream<T, Error>?
+    public func retrieveAsync<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>?
     {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
