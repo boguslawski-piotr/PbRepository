@@ -10,7 +10,7 @@ public final class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleReposit
     private let coder: PbCoder
     private let userDefaults: UserDefaults
 
-    public init(name: String, coder: PbCoder = PropertyListCoder(), userDefaults: UserDefaults = UserDefaults.standard) {
+    public init(name: String = "", coder: PbCoder = PropertyListCoder(), userDefaults: UserDefaults = UserDefaults.standard) {
         self.name = name
         self.coder = coder
         self.userDefaults = userDefaults
