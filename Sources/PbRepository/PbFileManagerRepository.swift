@@ -32,7 +32,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
              lastCharacter
     }
 
-    public let name: String
+    public private(set) var name: String
 
     private let distributingFilesRule: DistributingFilesRules
     private let coder: PbCoder
@@ -53,6 +53,10 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         self.fileManager = fileManager
     }
 
+    public func setName(_ name: String) {
+        self.name = name
+    }
+    
     private func createDirectory(at url: URL) throws {
         if !fileManager.fileExists(atPath: url.path) {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
