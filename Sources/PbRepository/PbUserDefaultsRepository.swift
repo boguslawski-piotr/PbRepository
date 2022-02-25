@@ -5,10 +5,10 @@
 import Foundation
 import PbEssentials
 
-public final class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleRepositoryAsync {
+open class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleRepositoryAsync {
     public let name: String
-    private let coder: PbCoder
-    private let userDefaults: UserDefaults
+    public let coder: PbCoder
+    public let userDefaults: UserDefaults
 
     public init(name: String = "", coder: PbCoder = PropertyListCoder(), userDefaults: UserDefaults = UserDefaults.standard) {
         self.name = name
@@ -16,31 +16,31 @@ public final class PbUserDefaultsRepository: PbSimpleRepository, PbSimpleReposit
         self.userDefaults = userDefaults
     }
 
-    public func delete(_ name: String) throws {
+    open func delete(_ name: String) throws {
         userDefaults.removeObject(forKey: name)
     }
 
-    public func deleteAsync(_ name: String) async throws {
+    open func deleteAsync(_ name: String) async throws {
         try delete(name)
     }
 
-    public func store<T: Encodable>(item: T, to name: String) throws {
+    open func store<T: Encodable>(item: T, to name: String) throws {
         let data = try coder.encode(item)
         userDefaults.set(data, forKey: name)
     }
 
-    public func storeAsync<T: Encodable>(item: T, to name: String) async throws {
+    open func storeAsync<T: Encodable>(item: T, to name: String) async throws {
         try store(item: item, to: name)
     }
 
-    public func retrieve<T: Decodable>(itemOf type: T.Type, from name: String) throws -> T? {
+    open func retrieve<T: Decodable>(itemOf type: T.Type, from name: String) throws -> T? {
         if let data = userDefaults.data(forKey: name) {
             return try coder.decode(T.self, from: data)
         }
         return nil
     }
 
-    public func retrieveAsync<T: Decodable>(itemOf type: T.Type, from name: String) async throws -> T? {
+    open func retrieveAsync<T: Decodable>(itemOf type: T.Type, from name: String) async throws -> T? {
         return try retrieve(itemOf: type, from: name)
     }
 }

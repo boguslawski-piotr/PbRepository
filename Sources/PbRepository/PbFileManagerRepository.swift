@@ -5,7 +5,9 @@
 import Foundation
 import PbEssentials
 
-public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
+open class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
+    // MARK: Definitions
+    
     public struct FileMetadata: PbRepository.ItemMetadata {
         public var name: String
         public var size: Int?
@@ -32,12 +34,14 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
              lastCharacter
     }
 
-    public private(set) var name: String
+    open var name: String
 
-    private let distributingFilesRule: DistributingFilesRules
-    private let coder: PbCoder
-    private let baseUrl: URL
-    private let fileManager: FileManager
+    public let distributingFilesRule: DistributingFilesRules
+    public let coder: PbCoder
+    public let baseUrl: URL
+    public let fileManager: FileManager
+
+    // MARK: Initialization
 
     public init(
         name: String,
@@ -53,23 +57,21 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         self.fileManager = fileManager
     }
 
-    public func setName(_ name: String) {
-        self.name = name
-    }
+    // MARK: Filenames
     
-    private func createDirectory(at url: URL) throws {
+    public func createDirectory(at url: URL) throws {
         if !fileManager.fileExists(atPath: url.path) {
             try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         }
     }
 
-    public func repositoryUrl() throws -> URL {
+    open func repositoryUrl() throws -> URL {
         let url = baseUrl.appendingPathComponent(self.name.asPathComponent())
         try createDirectory(at: url)
         return url
     }
 
-    public func fileUrl(_ fileName: String) throws -> URL {
+    open func fileUrl(_ fileName: String) throws -> URL {
         let fileName = fileName.asPathComponent()
         var url = try repositoryUrl()
         var dirName = ""
@@ -93,7 +95,9 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         return url.appendingPathComponent(fileName)
     }
 
-    public func metadata(for name: String) throws -> PbRepository.ItemMetadata? {
+    // MARK: Implementation
+    
+    open func metadata(for name: String) throws -> PbRepository.ItemMetadata? {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
 
@@ -106,11 +110,11 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         )
     }
 
-    public func metadataAsync(for name: String) async throws -> PbRepository.ItemMetadata? {
+    open func metadataAsync(for name: String) async throws -> PbRepository.ItemMetadata? {
         try metadata(for: name)
     }
 
-    private func itemNames(matching isIncluded: @escaping (String) throws -> Bool) throws -> [String] {
+    public func itemNames(matching isIncluded: @escaping (String) throws -> Bool) throws -> [String] {
         var itemNames = [String]()
         if let filesEnumerator = fileManager.enumerator(at: try repositoryUrl(), includingPropertiesForKeys: nil) {
             for case let fileUrl as URL in filesEnumerator {
@@ -126,7 +130,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         return itemNames
     }
 
-    public func metadata(forAllMatching isIncluded: @escaping (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error>
+    open func metadata(forAllMatching isIncluded: @escaping (String) throws -> Bool) throws -> ThrowingStream<PbRepository.ItemMetadata, Error>
     {
         var itemNamesIterator = try itemNames(matching: isIncluded).makeIterator()
         return ThrowingStream {
@@ -136,7 +140,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func metadataAsync(forAllMatching isIncluded: @escaping (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error>
+    open func metadataAsync(forAllMatching isIncluded: @escaping (String) throws -> Bool) async throws -> AsyncThrowingStream<PbRepository.ItemMetadata, Error>
     {
         // TODO: Make it more asynchronous: use fileManager.enumerator.nextObject inside AsyncThrowingStream closure.
         var itemNamesIterator = try itemNames(matching: isIncluded).makeIterator()
@@ -148,36 +152,36 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func store<T: Encodable>(item: T, to name: String) throws {
+    open func store<T: Encodable>(item: T, to name: String) throws {
         let fileUrl = try fileUrl(name)
         let data = try coder.encode(item)
         try data.write(to: fileUrl)
     }
 
-    public func storeAsync<T: Encodable>(item: T, to name: String) async throws {
+    open func storeAsync<T: Encodable>(item: T, to name: String) async throws {
         try store(item: item, to: name)
     }
 
-    public func store<T: Sequence>(sequence: T, to name: String) throws where T.Element: Encodable {
+    open func store<T: Sequence>(sequence: T, to name: String) throws where T.Element: Encodable {
         try store(item: sequence.map({ $0 }), to: name)
     }
 
-    public func storeAsync<T: Sequence>(sequence: T, to name: String) async throws where T.Element: Encodable {
+    open func storeAsync<T: Sequence>(sequence: T, to name: String) async throws where T.Element: Encodable {
         try store(sequence: sequence, to: name)
     }
 
-    public func retrieve<T: Decodable>(itemOf type: T.Type, from name: String) throws -> T? {
+    open func retrieve<T: Decodable>(itemOf type: T.Type, from name: String) throws -> T? {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
         let data = try Data(contentsOf: fileUrl)
         return try coder.decode(T.self, from: data)
     }
 
-    public func retrieveAsync<T: Decodable>(itemOf type: T.Type, from name: String) async throws -> T? {
+    open func retrieveAsync<T: Decodable>(itemOf type: T.Type, from name: String) async throws -> T? {
         try retrieve(itemOf: type, from: name)
     }
 
-    public func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>?
+    open func retrieve<T: Decodable>(sequenceOf type: T.Type, from name: String) throws -> ThrowingStream<T, Error>?
     {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
@@ -187,7 +191,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func retrieveAsync<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>?
+    open func retrieveAsync<T: Decodable>(sequenceOf type: T.Type, from name: String) async throws -> AsyncThrowingStream<T, Error>?
     {
         let fileUrl = try fileUrl(name)
         guard fileManager.fileExists(atPath: fileUrl.path) else { return nil }
@@ -198,7 +202,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func rename(_ from: String, to: String) throws -> Bool {
+    open func rename(_ from: String, to: String) throws -> Bool {
         let fromUrl = try fileUrl(from)
         guard fileManager.fileExists(atPath: fromUrl.path) else { return false }
         let toUrl = try fileUrl(to)
@@ -206,11 +210,11 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         return true
     }
 
-    public func renameAsync(_ from: String, to: String) async throws -> Bool {
+    open func renameAsync(_ from: String, to: String) async throws -> Bool {
         try rename(from, to: to)
     }
 
-    public func delete(_ name: String) throws {
+    open func delete(_ name: String) throws {
         let fileUrl = try fileUrl(name)
         if fileManager.fileExists(atPath: fileUrl.path) {
             if (try? fileManager.trashItem(at: fileUrl, resultingItemURL: nil)) == nil {
@@ -219,7 +223,7 @@ public final class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
-    public func deleteAsync(_ name: String) async throws {
+    open func deleteAsync(_ name: String) async throws {
         try delete(name)
     }
 }

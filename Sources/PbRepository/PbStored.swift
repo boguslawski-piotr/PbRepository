@@ -20,6 +20,12 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
     public lazy var retrieving = AnyPublisher(_retrieving)
     public lazy var storing = AnyPublisher(_storing)
 
+    public var name: String {
+        didSet {
+            retrieve()
+        }
+    }
+    
     public var lastError: PbError?
 
     public var wrappedValue: Value {
@@ -77,16 +83,24 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
         retrieve()
     }
 
+    public func setValue(_ newValue: Value, andStore: Bool = true) {
+        _objectWillChange?.send()
+        value = newValue
+        _objectDidChange?.send()
+        valueDidSet?()
+        if andStore {
+            store()
+        }
+    }
+    
     public var _objectWillChange: ObservableObjectPublisher?
     public var _objectDidChange: ObservableObjectPublisher?
-
-    private var name: String
-    private var repository: PbStoredRepository?
-    private var storeTask: Task.NoResultCanThrow?
 
     private lazy var _retrieving = CurrentValueSubject<Bool, Never>(false)
     private lazy var _storing = CurrentValueSubject<Bool, Never>(false)
 
+    private var repository: PbStoredRepository?
+    private var storeTask: Task.NoResultCanThrow?
     private var subscriptions: [AnyCancellable?] = [nil, nil, nil]
     private var valueDidRetrieve: (() -> Void)?
     private var valueDidSet: (() -> Void)?
@@ -116,16 +130,6 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
         cancelSubscriptions()
     }
 
-    private func setValue(_ newValue: Value, andStore: Bool = true) {
-        _objectWillChange?.send()
-        value = newValue
-        _objectDidChange?.send()
-        valueDidSet?()
-        if andStore {
-            store()
-        }
-    }
-
     private func perform(_ code: () throws -> Void) {
         do {
             try code()
@@ -143,6 +147,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
     }
 
     public func retrieve(_ repository: PbStoredRepository? = nil) {
+        guard !name.isEmpty else { return }
         if repository != nil {
             self.repository = repository
         }
@@ -168,8 +173,8 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
                 await perform {
                     //                    try await Task.sleep(for: .seconds(1))
                     if let v = try await repository?.retrieveAsync(itemOf: Value.self, from: self.name) {
-                        self.setValue(v, andStore: false)
-                        self.valueDidRetrieve?()
+                        setValue(v, andStore: false)
+                        valueDidRetrieve?()
                     }
                 }
                 _retrieving.send(false)
@@ -178,6 +183,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
     }
 
     public func store() {
+        guard !name.isEmpty else { return }
         guard repository != nil else { return }
         guard _retrieving.value == false else { return }
 
@@ -223,7 +229,7 @@ extension PbObservableCollection {
     Method called after contents of `ObservableCollection` was retrieved from some storage (see `PbStored.retrieve`).
     Invoke `didRetrieve` for all elements and it's properties that are declared as `PbStoredProperty`.
     */
-    internal func _didRetrieve() {
+    public func _didRetrieve() {
         for element in elements {
             var reflection: Mirror? = Mirror(reflecting: element)
             while let aClass = reflection {
