@@ -16,7 +16,7 @@ public enum PbStoredRepository {
 }
 
 @propertyWrapper
-public final class PbStored<Value: Codable>: PbPublishedProperty {
+public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableObject {
     public lazy var retrieving = AnyPublisher(_retrieving)
     public lazy var storing = AnyPublisher(_storing)
 
@@ -84,9 +84,11 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
     }
 
     public func setValue(_ newValue: Value, andStore: Bool = true) {
+        objectWillChange.send()
         _objectWillChange?.send()
         value = newValue
         _objectDidChange?.send()
+        objectDidChange.send()
         valueDidSet?()
         if andStore {
             store()
@@ -112,10 +114,10 @@ public final class PbStored<Value: Codable>: PbPublishedProperty {
             self?.store()
         }
         subscriptions[1] = value.objectWillChange.sink { [weak self] _ in
-            self?._objectWillChange?.send()
+            self?.objectWillChange.send(); self?._objectWillChange?.send()
         }
         subscriptions[2] = value.objectDidChange.sink { [weak self] _ in
-            self?._objectDidChange?.send()
+            self?._objectDidChange?.send(); self?.objectDidChange.send()
         }
     }
 
