@@ -202,6 +202,7 @@ open class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         }
     }
 
+    @discardableResult
     open func rename(_ from: String, to: String) throws -> Bool {
         let fromUrl = try fileUrl(from)
         guard fileManager.fileExists(atPath: fromUrl.path) else { return false }
@@ -210,6 +211,7 @@ open class PbFileManagerRepository: PbRepository, PbRepositoryAsync {
         return true
     }
 
+    @discardableResult
     open func renameAsync(_ from: String, to: String) async throws -> Bool {
         try rename(from, to: to)
     }

@@ -69,16 +69,22 @@ struct Repository {
 }
 
 class NotesData: PbObservableObject {
-    @PbStored("data", Repository.notesDataRepository) var data = PbObservableArray<Group>()
+    @PbStored("data", Repository.notesDataRepository) @PbObservableCollection var data: [Group] = []
     @PbStored("test", Repository.notesDataRepository) var test = "Initial value"
 
+    static var groupLoaded = 0
     static var notesLoaded = 0
     static var noteLoaded = 0
 
-    class Group: PbObservableObject, Codable {
+    class Group: PbObservableObject, Codable, PbStoredProperty {
+        func didRetrieve() {
+            dbg("Group didLoad")
+            NotesData.groupLoaded += 1
+        }
+
         @PbPublished var id = UUID()
         @PbPublished var name: String
-        @PbPublished var noteses = PbObservableArray<Notes>()
+        @PbPublished @PbObservableCollection var noteses: [Notes] = []
 
         init(_ name: String) {
             self.name = name
@@ -86,7 +92,7 @@ class NotesData: PbObservableObject {
 
         func createNotes(_ name: String) -> Notes {
             let notes = Notes(name)
-            noteses.elements.append(notes)
+            noteses.append(notes)
             return notes
         }
     }
@@ -99,7 +105,7 @@ class NotesData: PbObservableObject {
 
         @PbPublished var id = UUID()
         @PbPublished var name: String
-        @PbPublished var notes = PbObservableArray<Note>()
+        @PbPublished @PbObservableCollection var notes: [Note] = []
 
         init(_ name: String) {
             self.name = name
@@ -107,7 +113,7 @@ class NotesData: PbObservableObject {
 
         func createNote(_ subject: String, _ content: String) -> Note {
             let note = Note(subject, content)
-            notes.elements.append(note)
+            notes.append(note)
             return note
         }
     }
@@ -146,7 +152,7 @@ class NotesData: PbObservableObject {
 
     func createGroup(_ name: String) -> Group {
         let group = Group(name)
-        data.elements.append(group)
+        data.append(group)
         return group
     }
 }
@@ -165,16 +171,18 @@ public class NotesApp: XCTestCase {
 
         XCTAssert(changes == 12)
         XCTAssert(changes == changesInCode)
+        XCTAssert(NotesData.groupLoaded == 0)
         XCTAssert(NotesData.notesLoaded == 0)
         XCTAssert(NotesData.noteLoaded == 0)
 
-        Thread.sleep(forTimeInterval: .seconds(1))
+//        Thread.sleep(forTimeInterval: .seconds(1))
 
         let notesData2 = NotesData()
         step(notesData: notesData2, testShouldBe: "New value")
 
         XCTAssert(changes == 15)
         XCTAssert(changes == changesInCode)
+        XCTAssert(NotesData.groupLoaded == 1)
         XCTAssert(NotesData.notesLoaded == 1)
         XCTAssert(NotesData.noteLoaded == 3)
     }
@@ -212,7 +220,7 @@ public class NotesApp: XCTestCase {
 
         // Test NEW data
 
-        notesData.data.elements.removeAll()
+        notesData.data.removeAll()
         changesInCode += 1
 
         let group = notesData.createGroup("group 1")

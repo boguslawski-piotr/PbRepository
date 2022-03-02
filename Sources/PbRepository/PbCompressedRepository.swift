@@ -10,11 +10,11 @@ import PbEssentials
 public struct PbCompressedRepository<Repository>: PbRepositoryDecorator {
     public typealias Repository = Repository
 
-    public let compressorDecompressor: PbCompressorDecompressor
+    public let compressorDecompressor: PbCompressor & PbDecompressor
     public let repository: Repository
     public let coder: PbCoder
     
-    public init(_ repository: Repository, compressorDecompressor: PbCompressorDecompressor = PbSimpleCompressorDecompressor(), coder: PbCoder = PropertyListCoder()) {
+    public init(_ repository: Repository, compressorDecompressor: PbCompressor & PbDecompressor = PbSimpleCompressor(), coder: PbCoder = PropertyListCoder()) {
         self.compressorDecompressor = compressorDecompressor
         self.repository = repository
         self.coder = coder

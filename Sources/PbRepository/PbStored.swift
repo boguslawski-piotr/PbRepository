@@ -15,6 +15,8 @@ public enum PbStoredRepository {
     case async(PbSimpleRepositoryAsync?, delayStoringBy: TimeInterval = .miliseconds(250))
 }
 
+// TODO: dodac lock(s), w wielu miejscach w prywatnych skladowych i jako opcje dla value
+
 @propertyWrapper
 public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableObject {
     public lazy var retrieving = AnyPublisher(_retrieving)
@@ -102,22 +104,23 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
     private lazy var _storing = CurrentValueSubject<Bool, Never>(false)
 
     private var repository: PbStoredRepository?
-    private var storeTask: Task.NoResultCanThrow?
-    private var subscriptions: [AnyCancellable?] = [nil, nil, nil]
+    @PbWithLock private var storeTask: Task.NoResultCanThrow?
+    
+    private var subscriptions: [AnyCancellable?] = [nil, nil]
     private var valueDidRetrieve: (() -> Void)?
     private var valueDidSet: (() -> Void)?
     private var value: Value
 
     private func subscribeToValue() where Value: PbObservableObject {
         cancelSubscriptions()
-        subscriptions[0] = value.objectDidChange.sink { [weak self] _ in
+        subscriptions[0] = value.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+            self?._objectWillChange?.send()
+        }
+        subscriptions[1] = value.objectDidChange.sink { [weak self] _ in
+            self?._objectDidChange?.send()
+            self?.objectDidChange.send()
             self?.store()
-        }
-        subscriptions[1] = value.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send(); self?._objectWillChange?.send()
-        }
-        subscriptions[2] = value.objectDidChange.sink { [weak self] _ in
-            self?._objectDidChange?.send(); self?.objectDidChange.send()
         }
     }
 
@@ -218,20 +221,9 @@ public protocol PbStoredProperty {
     func didRetrieve()
 }
 
-extension PbPublished: PbStoredProperty {
-    public func didRetrieve() {
-        if let value = wrappedValue as? PbStoredProperty {
-            value.didRetrieve()
-        }
-    }
-}
-
-extension PbObservableCollection {
-    /**
-    Method called after contents of `ObservableCollection` was retrieved from some storage (see `PbStored.retrieve`).
-    Invoke `didRetrieve` for all elements and it's properties that are declared as `PbStoredProperty`.
-    */
-    public func _didRetrieve() {
+public extension PbStoredProperty {
+    /// Invoke `didRetrieve` for all elements and it's properties that conforms to `PbStoredProperty` protocol.
+    func _didRetrieve<Elements: Sequence>(elements: inout Elements) {
         for element in elements {
             var reflection: Mirror? = Mirror(reflecting: element)
             while let aClass = reflection {
@@ -242,7 +234,7 @@ extension PbObservableCollection {
                 }
                 reflection = aClass.superclassMirror
             }
-
+            
             if let element = element as? PbStoredProperty {
                 element.didRetrieve()
             }
@@ -250,14 +242,22 @@ extension PbObservableCollection {
     }
 }
 
-extension PbObservableArray: PbStoredProperty {
+extension PbPublished: PbStoredProperty {
     public func didRetrieve() {
-        _didRetrieve()
+        if let value = wrappedValue as? PbStoredProperty {
+            value.didRetrieve()
+        }
     }
 }
 
-extension PbObservableSet: PbStoredProperty {
+extension PbObservableCollection: PbStoredProperty {
     public func didRetrieve() {
-        _didRetrieve()
+        _didRetrieve(elements: &_elements)
+    }
+}
+
+extension PbObservableDictionary: PbStoredProperty {
+    public func didRetrieve() {
+        _didRetrieve(elements: &_dictionary.values)
     }
 }
