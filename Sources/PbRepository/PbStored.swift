@@ -18,7 +18,7 @@ public enum PbStoredRepository {
 // TODO: dodac lock(s), w wielu miejscach w prywatnych skladowych i jako opcje dla value
 
 @propertyWrapper
-public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableObject {
+public final class PbStored<Value: Codable>: PbObservableObjectBase, PbPublishedProperty {
     public lazy var retrieving = AnyPublisher(_retrieving)
     public lazy var storing = AnyPublisher(_storing)
 
@@ -43,6 +43,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
         self.repository = repository
         self.name = name
         self.value = wrappedValue
+        super.init()
         retrieve()
     }
 
@@ -54,6 +55,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
         self.repository = repository
         self.name = name
         self.value = wrappedValue
+        super.init()
         valueDidRetrieve = { [weak self] in self?.value.didRetrieve() }
         retrieve()
     }
@@ -66,6 +68,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
         self.repository = repository
         self.name = name
         self.value = wrappedValue
+        super.init()
         valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
         retrieve()
@@ -79,6 +82,7 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
         self.repository = repository
         self.name = name
         self.value = wrappedValue
+        super.init()
         valueDidRetrieve = { [weak self] in self?.value.didRetrieve() }
         valueDidSet = { [weak self] in self?.subscribeToValue() }
         valueDidSet?()
@@ -106,33 +110,21 @@ public final class PbStored<Value: Codable>: PbPublishedProperty, PbObservableOb
     private var repository: PbStoredRepository?
     @PbWithLock private var storeTask: Task.NoResultCanThrow?
     
-    private var subscriptions: [AnyCancellable?] = [nil, nil]
     private var valueDidRetrieve: (() -> Void)?
     private var valueDidSet: (() -> Void)?
     private var value: Value
 
     private func subscribeToValue() where Value: PbObservableObject {
         cancelSubscriptions()
-        subscriptions[0] = value.objectWillChange.sink { [weak self] _ in
+        _subscriptions.append(value.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
             self?._objectWillChange?.send()
-        }
-        subscriptions[1] = value.objectDidChange.sink { [weak self] _ in
+        })
+        _subscriptions.append(value.objectDidChange.sink { [weak self] _ in
             self?._objectDidChange?.send()
             self?.objectDidChange.send()
             self?.store()
-        }
-    }
-
-    private func cancelSubscriptions() {
-        subscriptions.enumerated().forEach({
-            $0.element?.cancel()
-            subscriptions[$0.offset] = nil
         })
-    }
-
-    deinit {
-        cancelSubscriptions()
     }
 
     private func perform(_ code: () throws -> Void) {
